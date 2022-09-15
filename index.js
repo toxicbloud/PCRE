@@ -1,11 +1,12 @@
-
 class Operator {
-    static INTEGER = 'INTEGER';
-    static PLUS = 'PLUS';
-    static MINUS = 'MINUS';
-    static EOF = 'EOF';
-    static MUL = 'MUL';
-    static DIV = 'DIV';
+    static INTEGER = 'INTEGER'
+    static PLUS = 'PLUS'
+    static MINUS = 'MINUS'
+    static EOF = 'EOF'
+    static MUL = 'MUL'
+    static DIV = 'DIV'
+    static LPAREN = 'LPAREN'
+    static RPAREN = 'RPAREN'
 }
 
 class Token {
@@ -20,16 +21,14 @@ class Token {
         return this.str()
     }
 }
-
-class Interpreter {
+class Lexer {
     constructor(text) {
         this.text = text
         this.pos = 0
-        this.current_token = null
         this.current_char = this.text[this.pos]
     }
     error() {
-        throw new Error('Error parsing input')
+        throw new Error('Invalid character')
     }
     advance() {
         this.pos += 1
@@ -70,24 +69,74 @@ class Interpreter {
                 this.advance()
                 return new Token(Operator.MINUS, '-')
             }
+            if (this.current_char === '*') {
+                this.advance()
+                return new Token(Operator.MUL, '*')
+            }
+            if (this.current_char === '/') {
+                this.advance()
+                return new Token(Operator.DIV, '/')
+            }
+            if (this.current_char === '(') {
+                this.advance()
+                return new Token(Operator.LPAREN, '(')
+            }
+            if (this.current_char === ')') {
+                this.advance()
+                return new Token(Operator.RPAREN, ')')
+            }
             this.error()
         }
         return new Token(Operator.EOF, null)
     }
+}
+class Interpreter {
+    constructor(lexer) {
+        this.lexer = lexer
+        this.current_token = this.lexer.get_next_token()
+    }
+    error() {
+        throw new Error('Invalid syntax')
+    }
+
     eat(token_type) {
         if (this.current_token.type === token_type) {
-            this.current_token = this.get_next_token()
+            this.current_token = this.lexer.get_next_token()
         } else {
             this.error()
         }
     }
+    factor() {
+        const token = this.current_token
+        if (token.type === Operator.INTEGER) {
+            this.eat(Operator.INTEGER)
+            return token.value
+        }
+        if (token.type === Operator.LPAREN) {
+            this.eat(Operator.LPAREN)
+            const result = this.expr()
+            this.eat(Operator.RPAREN)
+            return result
+        }
+    }
     term() {
-        let token = this.current_token
-        this.eat(Operator.INTEGER)
-        return token.value
+        let result = this.factor()
+        while (
+            this.current_token.type === Operator.MUL ||
+            this.current_token.type === Operator.DIV
+        ) {
+            let token = this.current_token
+            if (token.type === Operator.MUL) {
+                this.eat(Operator.MUL)
+                result *= this.factor()
+            } else if (token.type === Operator.DIV) {
+                this.eat(Operator.DIV)
+                result /= this.factor()
+            }
+        }
+        return result
     }
     expr() {
-        this.current_token = this.get_next_token()
         let result = this.term()
         while (
             this.current_token.type === Operator.PLUS ||
@@ -107,7 +156,7 @@ class Interpreter {
 }
 
 function main() {
-    let interpreter = new Interpreter('10 + 5 + 96854654 -5')
+    let interpreter = new Interpreter(new Lexer('(7 + 3) * 2 - 1'))
     let result = interpreter.expr()
     console.log(result)
 }
