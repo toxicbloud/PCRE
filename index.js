@@ -8,7 +8,31 @@ class Operator {
     static LPAREN = 'LPAREN'
     static RPAREN = 'RPAREN'
 }
-
+class AST {
+    constructor() {}
+}
+class BinOp extends AST {
+    constructor(left, op, right) {
+        super()
+        this.left = left
+        this.token = this.op = op
+        this.right = right
+    }
+}
+class Num extends AST {
+    constructor(token) {
+        super()
+        this.token = token
+        this.value = token.value
+    }
+}
+class UnaryOp extends AST {
+    constructor(op, expr) {
+        super()
+        this.token = this.op = op
+        this.expr = expr
+    }
+}
 class Token {
     constructor(type, value) {
         this.type = type
@@ -90,7 +114,7 @@ class Lexer {
         return new Token(Operator.EOF, null)
     }
 }
-class Interpreter {
+class Parser {
     constructor(lexer) {
         this.lexer = lexer
         this.current_token = this.lexer.get_next_token()
@@ -110,13 +134,13 @@ class Interpreter {
         const token = this.current_token
         if (token.type === Operator.INTEGER) {
             this.eat(Operator.INTEGER)
-            return token.value
+            return new Num(token)
         }
         if (token.type === Operator.LPAREN) {
             this.eat(Operator.LPAREN)
-            const result = this.expr()
+            const node = this.expr()
             this.eat(Operator.RPAREN)
-            return result
+            return node
         }
     }
     term() {
@@ -128,16 +152,15 @@ class Interpreter {
             let token = this.current_token
             if (token.type === Operator.MUL) {
                 this.eat(Operator.MUL)
-                result *= this.factor()
             } else if (token.type === Operator.DIV) {
                 this.eat(Operator.DIV)
-                result /= this.factor()
             }
+            result = new BinOp(result, token, this.factor())
         }
         return result
     }
     expr() {
-        let result = this.term()
+        let node = this.term()
         while (
             this.current_token.type === Operator.PLUS ||
             this.current_token.type === Operator.MINUS
@@ -145,19 +168,62 @@ class Interpreter {
             let token = this.current_token
             if (token.type === Operator.PLUS) {
                 this.eat(Operator.PLUS)
-                result += this.term()
             } else if (token.type === Operator.MINUS) {
                 this.eat(Operator.MINUS)
-                result -= this.term()
             }
+            node = new BinOp(node, token, this.term())
         }
-        return result
+        return node
+    }
+    parse() {
+        return this.expr()
+    }
+}
+class NodeVisitor {
+    constructor() {}
+    visit(node) {
+        const method_name = `visit_${node.constructor.name}`
+        const visitor = this[method_name]
+        if (visitor) {
+            return visitor(node)
+        } else {
+            return this.generic_visit(node)
+        }
+    }
+    generic_visit(node) {
+        throw new Error(`No visit_${node.constructor.name} method`)
     }
 }
 
-function main() {
-    let interpreter = new Interpreter(new Lexer('(7 + 3) * 2 - 1'))
-    let result = interpreter.expr()
-    console.log(result)
+class Interpreter extends NodeVisitor {
+    constructor(parser) {
+        super()
+        this.parser = parser
+    }
+    visit_BinOp(node) {
+        if (node.op.type === Operator.PLUS) {
+            return this.visit(node.left) + this.visit(node.right)
+        } else if (node.op.type === Operator.MINUS) {
+            return this.visit(node.left) - this.visit(node.right)
+        } else if (node.op.type === Operator.MUL) {
+            return this.visit(node.left) * this.visit(node.right)
+        } else if (node.op.type === Operator.DIV) {
+            return this.visit(node.left) / this.visit(node.right)
+        }
+    }
+    visit_Num(node) {
+        return node.value
+    }
+    visit(node) {
+        // refaire ça proprement le mec connait rien aux patterns
+        if (node instanceof BinOp) return this.visit_BinOp(node)
+        if (node instanceof Num) return this.visit_Num(node)
+    }
+    interpret() {
+        const tree = this.parser.parse()
+        return this.visit(tree)
+    }
 }
-main()
+
+// export lexer, parser, interpreter
+export { Lexer, Parser, Interpreter }
